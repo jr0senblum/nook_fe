@@ -93,8 +93,15 @@ resource_exists(Req, #{node := Node} = State) ->
             {true, Req2, maps:put(resource, index, State)};
         {NoteId, Req2} ->     
             case valid_id(Node, NoteId) of
-                true -> {true, Req2, maps:put(resource, NoteId, State)};
-                false -> {false, Req2, State}
+                true -> 
+                    case cowboy_req:binding(new, Req2) of
+                        {<<"new">>, Req3} -> 
+                            {true, Req3, maps:put(resource, new, State)};
+                        {undefined, Req3} ->
+                            {true, Req3, maps:put(resource, NoteId, State)}
+                    end;
+                false ->
+                    {false, Req2, State}
             end
     end.
 
@@ -109,13 +116,12 @@ create_note(Req, #{node := Node} = State) ->
             [Note, TTL, Gets] = Results,
             case rpc:call(Node, nook, new, [Note, TTL, Gets]) of
                 {error, badarg} ->
-                    {false, Req2, State};
+                    {{true, <<$/>>}, Req2, State};
                 Id -> 
-                    _Id2 = for_cowboy(Id),
+                    Id2 = for_cowboy(Id),
                     case cowboy_req:method(Req2) of
                         {<<"POST">>, Req3} ->
-%                            {{true, <<$/, Id2/binary>>}, Req3, State};
-                            {{true, <<$/>>}, Req3, State};
+                            {{true, <<$/, "new/", Id2/binary>>}, Req3, maps:put(resource, new, State)};
                         {_, Req3} ->
                             {true, Req3, State}
                     end
@@ -128,9 +134,26 @@ note_html(Req, #{resource := index} = State) ->
     Req2 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req),
     {read_file("index.html"), Req2, State};
 
+note_html(Req, #{resource := new} = State) ->
+    {NoteId, Req2} = cowboy_req:binding(note_id, Req),
+    {HostUrl, Req3} = cowboy_req:host_url(Req2),
+    Req4 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req3),
+    {format_new_html(NoteId, HostUrl), Req4, State};
+
 note_html(Req, #{resource := NoteId, node := Node} = State) ->
     Req2 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req),
     {format_html(NoteId, Node), Req2, State}.
+
+format_new_html(NoteId, HostUrl) ->
+    Id = for_cowboy(NoteId),
+
+    <<"<!DOCTYPE html><html>",
+      "<head><title>Zambeel Receipt</title>Zambeel Receipt</head>",
+      "<body><pre><code>Id: ", 
+      Id/binary, "</br>Note retrieval at: </br>",
+      "<a href=", HostUrl/binary, "/", Id/binary, ">",
+      HostUrl/binary, "/", Id/binary, 
+     "</code></pre></body></html>\n">>.
 
 
 format_html(NoteId, Node) ->
@@ -146,7 +169,7 @@ format_html(NoteId, Node) ->
                       E
               end,
     <<"<!DOCTYPE html><html>",
-      "<head><title>note</title></head>",
+      "<head><title>Zambeel Note</title>Zambeel Note</head>",
       "<body><pre><code>", Message/binary, "</code></pre></body></html>\n">>.
 
 
