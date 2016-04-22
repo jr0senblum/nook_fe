@@ -19,16 +19,14 @@
 
 
 init(_Type, _Req, []) ->
-
-    put(node, 'nook@127.0.0.1'),
     {upgrade, protocol, cowboy_rest}.
 
 terminate(_Reason, _Req, _State) ->
 	ok.
 
 rest_init(Req, _Opts) ->
-    {ok, Req, 'nook@127.0.0.1'}.
-
+    {ok, Node} = application:get_env(nook_fe, node),
+    {ok, Req, #{node => Node}}.
 
 %%% ============================================================================
 %%$                    RESTful call-backs : GET and POST
@@ -58,12 +56,12 @@ content_types_provided(Req, State) ->
 
 % Delete the resource. This happens immediately, do delete_completed is not 
 % explicitly needed because its default is true.
-delete_resource(Req, State) -> 
+delete_resource(Req, #{node := Node} = State) -> 
     case cowboy_req:binding(note_id, Req) of
         {undefined, Req2} ->
             {false, Req2, State};
         {Id, Req2} ->
-            case rpc:call(get(node), nook, destory, [for_nook(Id)]) of
+            case rpc:call(Node, nook, destory, [for_nook(Id)]) of
                 ok ->
                     {true, Req2, State};
                 _ ->
@@ -73,12 +71,12 @@ delete_resource(Req, State) ->
 
     
 % Date the resource expires.
-expires(Req, State) ->
+expires(Req, #{node := Node} = State) ->
     case cowboy_req:binding(note_id, Req) of
         {undefined, Req2} ->
             {undefined, Req2, State};
         {Id, Req2} ->
-            case rpc:call(get(node), nook, expiration, [for_nook(Id)]) of
+            case rpc:call(Node, nook, expiration, [for_nook(Id)]) of
                 {ok, DateTime} ->
                     Expiration = list_to_binary(ec_date:format("D, j M Y G:i:s", DateTime) ++ " GMT"),
                     {Expiration, Req2, State};
@@ -88,58 +86,73 @@ expires(Req, State) ->
     end.
 
 % For GET, HEAD, POST, PUT, PATCH, DELETE: Return wheather the resource exists.
-resource_exists(Req, _State) -> 
+resource_exists(Req, #{node := Node} = State) -> 
     case cowboy_req:binding(note_id, Req) of
         {undefined, Req2} ->          
             % no note_id on the uri
-            {true, Req2, index};
+            {true, Req2, maps:put(resource, index, State)};
         {NoteId, Req2} ->     
-            case valid_id(NoteId) of
-                true -> {true, Req2, NoteId};
-                false -> {false, Req2, NoteId}
+            case valid_id(Node, NoteId) of
+                true -> {true, Req2, maps:put(resource, NoteId, State)};
+                false -> {false, Req2, State}
             end
     end.
 
     
-
 % Result of a Post: if succesful should take the user to /noteid
-create_note(Req, State) ->          
+create_note(Req, #{node := Node} = State) ->          
     {ok, Params, Req2} = cowboy_req:body_qs(Req),
-    Note = params(<<"note">>, Params), 
-    TTL = params(<<"TTL">>, Params),
-    Gets = params(<<"Gets">>, Params),
-    Id = for_cowboy(rpc:call(get(node), nook, new, [Note, TTL, Gets])),
-    case cowboy_req:method(Req2) of
-        {<<"POST">>, Req3} ->
-            {{true, <<$/, Id/binary>>}, Req3, State};
-        {_, Req3} ->
-            {true, Req3, State}
-	end.
+    case validate([<<"note">>,<<"TTL">>,<<"Gets">>],Params) of
+        error ->
+            {{true, <<$/>>}, Req2, State};
+        Results ->
+            [Note, TTL, Gets] = Results,
+            case rpc:call(Node, nook, new, [Note, TTL, Gets]) of
+                {error, badarg} ->
+                    {false, Req2, State};
+                Id -> 
+                    _Id2 = for_cowboy(Id),
+                    case cowboy_req:method(Req2) of
+                        {<<"POST">>, Req3} ->
+%                            {{true, <<$/, Id2/binary>>}, Req3, State};
+                            {{true, <<$/>>}, Req3, State};
+                        {_, Req3} ->
+                            {true, Req3, State}
+                    end
+            end
+    end.
 
 
 % Result of a GET or HEAD: Return an HTML representation of the note.
-note_html(Req, index) ->
+note_html(Req, #{resource := index} = State) ->
     Req2 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req),
-    {read_file("index.html"), Req2, index};
+    {read_file("index.html"), Req2, State};
 
-note_html(Req, Id) ->
+note_html(Req, #{resource := NoteId, node := Node} = State) ->
     Req2 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req),
-    {format_html(Id), Req2, Id}.
+    {format_html(NoteId, Node), Req2, State}.
 
 
-format_html(Id) ->
-    NookId = for_nook(Id),
-    {ok, #{contents := Contents}} = rpc:call(get(node), nook, get, [NookId]),
-    rpc:call(get(node), nook, decriment, [NookId]),
-
+format_html(NoteId, Node) ->
+    NookId = for_nook(NoteId),
+    
+    Message = case rpc:call(Node, nook, get, [NookId]) of
+                  {ok, #{contents := Contents}} ->
+                      rpc:call(Node, nook, decriment, [NookId]),
+                      Contents;
+                  {error, missing_note} ->
+                      <<"Missing note">>;
+                  {error, {storage_error, E}} ->
+                      E
+              end,
     <<"<!DOCTYPE html><html>",
       "<head><title>note</title></head>",
-      "<body><pre><code>", Contents/binary, "</code></pre></body></html>\n">>.
+      "<body><pre><code>", Message/binary, "</code></pre></body></html>\n">>.
 
 
-valid_id(NoteId) ->
+valid_id(Node, NoteId) ->
     Id = for_nook(NoteId),
-    case rpc:call(get(node), nook, exists, [Id]) of
+    case rpc:call(Node, nook, exists, [Id]) of
         true ->  
             true;
         _ ->     
@@ -166,6 +179,13 @@ for_cowboy(<<_/binary>> = Id) ->
     Id.
 
 
+validate(Keys, Proplist) ->
+    try
+        [params(Key, Proplist) || Key <- Keys]
+    catch
+        _:_ ->
+            error
+    end.
 params(<<"note">> = Key, PropList) ->
     proplists:get_value(Key, PropList);
 
