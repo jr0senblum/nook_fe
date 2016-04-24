@@ -148,12 +148,12 @@ format_new_html(NoteId, HostUrl) ->
     Id = for_cowboy(NoteId),
 
     <<"<!DOCTYPE html><html>",
-      "<head><title>Zambeel Receipt</title>Zambeel Receipt</head>",
-      "<body><pre><code>Id: ", 
-      Id/binary, "</br>Note retrieval at: </br>",
+      "<head><title>Zambeel Receipt</title></head>",
+      "<body><h1>Zambeel Receipt</h1><p>Id: ", 
+      Id/binary, "</br>Retrieve your note at: </br>",
       "<a href=", HostUrl/binary, "/", Id/binary, ">",
       HostUrl/binary, "/", Id/binary, 
-     "</code></pre></body></html>\n">>.
+     "</p></body></html>\n">>.
 
 
 format_html(NoteId, Node) ->
@@ -169,8 +169,10 @@ format_html(NoteId, Node) ->
                       E
               end,
     <<"<!DOCTYPE html><html>",
-      "<head><title>Zambeel Note</title>Zambeel Note</head>",
-      "<body><pre><code>", Message/binary, "</code></pre></body></html>\n">>.
+      "<head><title>Zambeel Note</title></head>",
+      "<body><h1>Zambeel Note</h1><p>", 
+      "The note: ", Message/binary, 
+      "</></body></html>\n">>.
 
 
 valid_id(Node, NoteId) ->

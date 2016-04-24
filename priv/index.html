@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Zambeel</title>
+  </head>
+  <body>
+    <h1>Zambeel</h1>
+    <p>
+      Enter your note, select a Time To Live in seconds and the number of allowable Gets.<br/>
+      TTL and Gets cannot both be infinite.
+    </p>
+    <form action="/" method="POST" autocomplete="off"">
+      <div> 
+        <div>
+          Time to live (secs): <input autofocus type="text" required placeholder="infinite or n > 0" size="20" name="TTL"></input>
+          Allowable gets: <input type="text" required placeholder="infinite or n > 0" size="20" name="Gets"></input>
+        </div>    
+        <textarea  required cols="80" rows="15" name="note"></textarea>
+      </div>
+      <div>
+	<button type="submit">Upload your note</button>
+      </div>
+    </form>
+  </body>
+</html>
+
