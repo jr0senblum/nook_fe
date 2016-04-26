@@ -37,3 +37,11 @@ stop(_State) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+% PrivDir = code:priv_dir(nook_fe),
+
+%    cowboy:start_https(https, 100, [{port, 8443},
+%                 {cacertfile, PrivDir ++ "/fullchain.pem"},
+%                 {certfile, PrivDir ++ "/cert.pem"},
+%                 {keyfile, PrivDir ++ "/privkey.pem"}],
+%                      [{env, [{dispatch, Dispatch}]}]
+%                     ),

@@ -142,7 +142,8 @@ note_html(Req, #{resource := new} = State) ->
 
 note_html(Req, #{resource := NoteId, node := Node} = State) ->
     Req2 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req),
-    {format_html(NoteId, Node), Req2, State}.
+    {HostUrl, Req3} = cowboy_req:host_url(Req2),
+    {format_html(NoteId, Node, HostUrl), Req3, State}.
 
 format_new_html(NoteId, HostUrl) ->
     Id = for_cowboy(NoteId),
@@ -156,7 +157,7 @@ format_new_html(NoteId, HostUrl) ->
      "</p></body></html>\n">>.
 
 
-format_html(NoteId, Node) ->
+format_html(NoteId, Node, HostUrl) ->
     NookId = for_nook(NoteId),
     
     Message = case rpc:call(Node, nook, get, [NookId]) of
@@ -171,7 +172,9 @@ format_html(NoteId, Node) ->
     <<"<!DOCTYPE html><html>",
       "<head><title>Quoin Note</title></head>",
       "<body><h1>Quoin Note</h1><p>", 
-      "The note: ", Message/binary, 
+      "The note: ", Message/binary, "</br></br>",
+      "Have a note of your own to send securely? visit: ",
+      "<a href=", HostUrl/binary, ">", HostUrl/binary, "/", 
       "</></body></html>\n">>.
 
 
