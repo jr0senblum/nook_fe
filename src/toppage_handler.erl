@@ -54,7 +54,7 @@ content_types_provided(Req, State) ->
          ], Req, State}.
 
 
-% Delete the resource. This happens immediately, do delete_completed is not 
+% Delete the resource. This happens immediately, so delete_completed is not 
 % explicitly needed because its default is true.
 delete_resource(Req, #{node := Node} = State) -> 
     case cowboy_req:binding(note_id, Req) of
@@ -172,10 +172,10 @@ format_html(NoteId, Node, HostUrl) ->
     <<"<!DOCTYPE html><html>",
       "<head><title>Quoin Note</title></head>",
       "<body><h1>Quoin Note</h1><p>", 
-      "The note: ", Message/binary, "</br></br>",
-      "Have a note of your own to send securely? visit: ",
-      "<a href=", HostUrl/binary, ">", HostUrl/binary, "/", 
-      "</></body></html>\n">>.
+      "<textarea  required cols='80' rows='15' name='note'>",Message/binary,"</textarea>",
+      "</br></br>",
+      "Visit <a href=", HostUrl/binary, ">", HostUrl/binary, "</a> ", 
+      "to send a secure note.</></body></html>\n">>.
 
 
 valid_id(Node, NoteId) ->
