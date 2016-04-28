@@ -1,25 +1,28 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta charset="utf-8">
     <title>Quoin</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link href='http://fonts.googleapis.com/css?family=Lato:400,700' rel='stylesheet' type='text/css'>
   </head>
   <body>
-    <h1>Quoin</h1>
-    <p>
-      Enter your note, select a Time To Live in seconds and the number of allowable Gets.<br/>
-      TTL and Gets cannot both be infinite.
-    </p>
-    <form action="/" method="POST" autocomplete="off"">
+    <form action="/" method="POST" autocomplete="off" >
+      <div class="header">
+        <p> Create a Note </p>
+      </div>
+      <div class="description">
+        <p>Select a tiime-to-live in seconds and the number of allowable Gets. TTL and Gets cannot both be infinite. </p>
+      </div>
       <div> 
-        <div>
-          Time to live (secs): <input autofocus type="text" required placeholder="infinite or n > 0" size="20" name="TTL"></input>
-          Allowable gets: <input type="text" required placeholder="infinite or n > 0" size="20" name="Gets"></input>
+        <div class="description">
+          <p>Time to live (secs):</p> <input autofocus type="text" required placeholder="infinite or n > 0" size="20" name="TTL"></input> </p>
+          <p>Allowable gets:</p> <input type="text" required placeholder="infinite or n > 0" size="20" name="Gets"></input> </p>
         </div>    
-        <textarea  required cols="80" rows="15" name="note"></textarea>
-      </div>
-      <div>
-	<button type="submit">Upload your note</button>
-      </div>
+        <div>
+          <textarea class="input" required cols="80" rows="15" name="note"></textarea>
+	  <input type="submit" class="button" value="Upload">
+        </div>
     </form>
   </body>
 </html>

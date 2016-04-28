@@ -7,7 +7,7 @@
          delete_resource/2,
          expires/2,
          resource_exists/2,
-         note_html/2,
+         note_html/2,         note_css/2,
          create_note/2]).
 
 
@@ -49,7 +49,7 @@ content_types_accepted(Req, State) ->
 % used for GET and HEAD. 
 content_types_provided(Req, State) ->
 	{[
-          {{<<"text">>, <<"plain">>, []}, note_text},
+          {{<<"text">>, <<"css">>, []}, note_css},
           {{<<"text">>, <<"html">>, []}, note_html}
          ], Req, State}.
 
@@ -105,6 +105,8 @@ resource_exists(Req, #{node := Node} = State) ->
             end
     end.
 
+
+
     
 % Result of a Post: if succesful should take the user to /noteid
 create_note(Req, #{node := Node} = State) ->          
@@ -128,6 +130,16 @@ create_note(Req, #{node := Node} = State) ->
             end
     end.
 
+% Result of a GET to the css loation
+note_css(Req, State) ->
+    case cowboy_req:binding(file, Req) of
+        {undefined, Req2} ->
+            {read_file("index.html"), Req2, State};
+        {File, Req2} ->
+            Req3 = cowboy_req:set_resp_header(<<"content-type">>, <<"text/css">>, Req2),
+            {read_file("css/" ++ binary_to_list(File)), Req3, State}
+    end.
+
 
 % Result of a GET or HEAD: Return an HTML representation of the note.
 note_html(Req, #{resource := index} = State) ->
@@ -140,6 +152,7 @@ note_html(Req, #{resource := new} = State) ->
     Req4 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req3),
     {format_new_html(NoteId, HostUrl), Req4, State};
 
+
 note_html(Req, #{resource := NoteId, node := Node} = State) ->
     Req2 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req),
     {HostUrl, Req3} = cowboy_req:host_url(Req2),
@@ -147,14 +160,10 @@ note_html(Req, #{resource := NoteId, node := Node} = State) ->
 
 format_new_html(NoteId, HostUrl) ->
     Id = for_cowboy(NoteId),
-
-    <<"<!DOCTYPE html><html>",
-      "<head><title>Quoin Receipt</title></head>",
-      "<body><h1>Quoin Receipt</h1><p>Id: ", 
-      Id/binary, "</br>Retrieve your note at: </br>",
-      "<a href=", HostUrl/binary, "/", Id/binary, ">",
-      HostUrl/binary, "/", Id/binary, 
-     "</p></body></html>\n">>.
+    X = read_file("recepit.html"),
+    X1 = re:replace(X, "ID_BINARY", <<Id/binary>>,[{return, list},global]),
+    X2 = re:replace(X1, "HOST_BINARY", <<HostUrl/binary>>,[{return, list},global]),
+    X2.
 
 
 format_html(NoteId, Node, HostUrl) ->
@@ -169,13 +178,11 @@ format_html(NoteId, Node, HostUrl) ->
                   {error, {storage_error, E}} ->
                       E
               end,
-    <<"<!DOCTYPE html><html>",
-      "<head><title>Quoin Note</title></head>",
-      "<body><h1>Quoin Note</h1><p>", 
-      "<textarea  required cols='80' rows='15' name='note'>",Message/binary,"</textarea>",
-      "</br></br>",
-      "Visit <a href=", HostUrl/binary, ">", HostUrl/binary, "</a> ", 
-      "to send a secure note.</></body></html>\n">>.
+    X = read_file("note.html"),
+    X1 = re:replace(X, "NOTE_BINARY", <<Message/binary>>,[{return, list},global]),
+    X2 = re:replace(X1, "ID_BINARY", <<NoteId/binary>>,[{return, list},global]),
+    X3 = re:replace(X2, "HOST_BINARY", <<HostUrl/binary>>,[{return, list},global]),
+    X3.    
 
 
 valid_id(Node, NoteId) ->

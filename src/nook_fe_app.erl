@@ -19,7 +19,7 @@ start(_StartType, _StartArgs) ->
 
     Dispatch = 
         cowboy_router:compile([
-                               {'_', [ 
+                               {'_', [ {"/css/:file", toppage_handler, []},
                                        {"/[:note_id]", toppage_handler, []},
                                        {"/:new/:note_id", toppage_handler, []}
                                      ]}
