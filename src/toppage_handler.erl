@@ -21,12 +21,17 @@
 init(_Type, _Req, []) ->
     {upgrade, protocol, cowboy_rest}.
 
+
 terminate(_Reason, _Req, _State) ->
 	ok.
+
 
 rest_init(Req, _Opts) ->
     {ok, Node} = application:get_env(nook_fe, node),
     {ok, Req, #{node => Node}}.
+
+
+
 
 %%% ============================================================================
 %%$                    RESTful call-backs : GET and POST
@@ -85,7 +90,8 @@ expires(Req, #{node := Node} = State) ->
             end
     end.
 
-% For GET, HEAD, POST, PUT, PATCH, DELETE: Return wheather the resource exists.
+
+% For GET, HEAD, POST, PUT, PATCH, DELETE: Return whether the resource exists.
 resource_exists(Req, #{node := Node} = State) -> 
     case cowboy_req:binding(note_id, Req) of
         {undefined, Req2} ->          
@@ -96,8 +102,10 @@ resource_exists(Req, #{node := Node} = State) ->
                 true -> 
                     case cowboy_req:binding(new, Req2) of
                         {<<"new">>, Req3} -> 
+                            % getting a newly created note 
                             {true, Req3, maps:put(resource, new, State)};
                         {undefined, Req3} ->
+                            % getting a previously created note 
                             {true, Req3, maps:put(resource, NoteId, State)}
                     end;
                 false ->
@@ -105,20 +113,22 @@ resource_exists(Req, #{node := Node} = State) ->
             end
     end.
 
-
-
     
-% Result of a Post: if succesful should take the user to /noteid
+% Result of a Post: if succesful should take the user to /note_id
 create_note(Req, #{node := Node} = State) ->          
+    Headers = [{<<"cache-control">>, <<"no-store">>}],
+
     {ok, Params, Req2} = cowboy_req:body_qs(Req),
-    case validate([<<"note">>,<<"TTL">>,<<"Gets">>],Params) of
-        error ->
-            {{true, <<$/>>}, Req2, State};
+    case validate([<<"note">>,<<"TTL">>,<<"Gets">>], Params) of
+        error -> 
+            {ok, _Req3} = cowboy_req:reply(400, Headers, index(error), Req2),
+            {false, Req2, State};
         Results ->
             [Note, TTL, Gets] = Results,
             case rpc:call(Node, nook, new, [Note, TTL, Gets]) of
                 {error, badarg} ->
-                    {{true, <<$/>>}, Req2, State};
+                    {ok, _Req3} = cowboy_req:reply(400, Headers, index(error), Req2),
+                    {false, Req2, State};
                 Id -> 
                     Id2 = for_cowboy(Id),
                     case cowboy_req:method(Req2) of
@@ -130,11 +140,12 @@ create_note(Req, #{node := Node} = State) ->
             end
     end.
 
-% Result of a GET to the css loation
+
+% Result of a GET to the css directory (text/css content type)
 note_css(Req, State) ->
     case cowboy_req:binding(file, Req) of
-        {undefined, Req2} ->
-            {read_file("index.html"), Req2, State};
+        {undefined, Req2} -> 
+            {index(no_error), Req2, State};
         {File, Req2} ->
             Req3 = cowboy_req:set_resp_header(<<"content-type">>, <<"text/css">>, Req2),
             {read_file("css/" ++ binary_to_list(File)), Req3, State}
@@ -144,7 +155,7 @@ note_css(Req, State) ->
 % Result of a GET or HEAD: Return an HTML representation of the note.
 note_html(Req, #{resource := index} = State) ->
     Req2 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req),
-    {read_file("index.html"), Req2, State};
+    {index(no_error), Req2, State};
 
 note_html(Req, #{resource := new} = State) ->
     {NoteId, Req2} = cowboy_req:binding(note_id, Req),
@@ -160,10 +171,10 @@ note_html(Req, #{resource := NoteId, node := Node} = State) ->
 
 format_new_html(NoteId, HostUrl) ->
     Id = for_cowboy(NoteId),
-    X = read_file("recepit.html"),
-    X1 = re:replace(X, "ID_BINARY", <<Id/binary>>,[{return, list},global]),
-    X2 = re:replace(X1, "HOST_BINARY", <<HostUrl/binary>>,[{return, list},global]),
-    X2.
+    Subject = read_file("recepit.html"),
+    Targets = ["ID_BINARY", "HOST_BINARY"],
+    Values = [<<Id/binary>>, <<HostUrl/binary>>],
+    substitute(Subject, Targets, Values).
 
 
 format_html(NoteId, Node, HostUrl) ->
@@ -178,11 +189,13 @@ format_html(NoteId, Node, HostUrl) ->
                   {error, {storage_error, E}} ->
                       E
               end,
-    X = read_file("note.html"),
-    X1 = re:replace(X, "NOTE_BINARY", <<Message/binary>>,[{return, list},global]),
-    X2 = re:replace(X1, "ID_BINARY", <<NoteId/binary>>,[{return, list},global]),
-    X3 = re:replace(X2, "HOST_BINARY", <<HostUrl/binary>>,[{return, list},global]),
-    X3.    
+    Subject = read_file("note.html"),
+    Targets = ["NOTE_BINARY","ID_BINARY","HOST_BINARY"],
+    Values = [<<Message/binary>>, <<NoteId/binary>>, <<HostUrl/binary>>],
+    substitute(Subject, Targets, Values). 
+
+
+
 
 
 valid_id(Node, NoteId) ->
@@ -221,6 +234,8 @@ validate(Keys, Proplist) ->
         _:_ ->
             error
     end.
+
+
 params(<<"note">> = Key, PropList) ->
     proplists:get_value(Key, PropList);
 
@@ -234,3 +249,19 @@ params_(N) ->
     binary_to_integer(N).
 
     
+index(error) ->
+    Subject = read_file("index.html"),
+    Value = <<"Ensure TTL and Gets are positive integers and that at most one is infinite.">>,
+    substitute(Subject, ["ERROR"], [Value]);
+
+index(_) ->
+    Subject = read_file("index.html"),
+    substitute(Subject, ["ERROR"], [<<"">>]).
+    
+
+substitute(Subject, [], []) ->
+    Subject;
+
+substitute(Subject, [T|Ts], [V|Vs]) ->
+    Result = re:replace(Subject, T, V, [{return, list}, global]),
+    substitute(Result, Ts, Vs).
