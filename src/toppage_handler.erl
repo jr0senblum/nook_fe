@@ -32,6 +32,29 @@ rest_init(Req, _Opts) ->
 
 
 
+%%% ============================================================================
+%%%                    Nook interface
+%%% ============================================================================
+
+
+% Encapsulate the rpc call to cut down on code redundancy. Id needs to be a
+% string and there may be 0 to n arguments to the nook call.
+%
+nook(Node, Method, Id) ->
+    rpc:call(Node, nook, Method, [fix_id(Id)]).
+
+
+nook(Node, Method, No_Id, Args) when is_atom(No_Id) ->
+    rpc:call(Node, nook, Method, Args);
+
+nook(Node, Method, Id, Args) ->
+    rpc:call(Node, nook, Method, [fix_id(Id) | Args]).
+
+
+fix_id(Id) when is_binary(Id) -> binary_to_list(Id);
+fix_id(Id) -> Id.
+     
+
 
 %%% ============================================================================
 %%$                    RESTful call-backs : GET and POST
@@ -50,7 +73,7 @@ content_types_accepted(Req, State) ->
 
 
 % For GET, HEAD, POST, PUT, PATCH, DELETE, the resource types provided and the
-% call-back to use when a representation of the resource needs to be returned 
+% call-back used when a representation of the resource needs to be returned 
 % used for GET and HEAD. 
 content_types_provided(Req, State) ->
 	{[
@@ -66,7 +89,7 @@ delete_resource(Req, #{node := Node} = State) ->
         {undefined, Req2} ->
             {false, Req2, State};
         {Id, Req2} ->
-            case rpc:call(Node, nook, destory, [for_nook(Id)]) of
+            case nook(Node, destory, Id) of
                 ok ->
                     {true, Req2, State};
                 _ ->
@@ -81,9 +104,9 @@ expires(Req, #{node := Node} = State) ->
         {undefined, Req2} ->
             {undefined, Req2, State};
         {Id, Req2} ->
-            case rpc:call(Node, nook, expiration, [for_nook(Id)]) of
+            case nook(Node, expiration, Id) of
                 {ok, DateTime} ->
-                    Expiration = list_to_binary(ec_date:format("D, j M Y G:i:s", DateTime) ++ " GMT"),
+                    Expiration = exp_string(DateTime),
                     {Expiration, Req2, State};
                 {error, missing_note} ->
                     {undefined, Req2, State}
@@ -95,14 +118,14 @@ expires(Req, #{node := Node} = State) ->
 resource_exists(Req, #{node := Node} = State) -> 
     case cowboy_req:binding(note_id, Req) of
         {undefined, Req2} ->          
-            % no note_id on the uri
+            % no note_id on the uri,
             {true, Req2, maps:put(resource, index, State)};
         {NoteId, Req2} ->     
-            case valid_id(Node, NoteId) of
+            case note_exists(Node, NoteId) of
                 true -> 
                     case cowboy_req:binding(new, Req2) of
                         {<<"new">>, Req3} -> 
-                            % getting a newly created note 
+                            % GETting a newly created note 
                             {true, Req3, maps:put(resource, new, State)};
                         {undefined, Req3} ->
                             % getting a previously created note 
@@ -114,7 +137,7 @@ resource_exists(Req, #{node := Node} = State) ->
     end.
 
     
-% Result of a Post: if succesful should take the user to /note_id
+% Result of a POST: if succesful should take the user to /note_id
 create_note(Req, #{node := Node} = State) ->          
     Headers = [{<<"cache-control">>, <<"no-store">>}],
 
@@ -123,14 +146,13 @@ create_note(Req, #{node := Node} = State) ->
         error -> 
             {ok, _Req3} = cowboy_req:reply(400, Headers, index(error), Req2),
             {false, Req2, State};
-        Results ->
-            [Note, TTL, Gets] = Results,
-            case rpc:call(Node, nook, new, [Note, TTL, Gets]) of
+        [Note, TTL, Gets] ->
+            case nook(Node, new, no_id, [Note, TTL, Gets]) of
                 {error, badarg} ->
                     {ok, _Req3} = cowboy_req:reply(400, Headers, index(error), Req2),
                     {false, Req2, State};
                 Id -> 
-                    Id2 = for_cowboy(Id),
+                    Id2 = to_binary(Id),
                     case cowboy_req:method(Req2) of
                         {<<"POST">>, Req3} ->
                             {{true, <<$/, "new/", Id2/binary>>}, Req3, maps:put(resource, new, State)};
@@ -163,14 +185,14 @@ note_html(Req, #{resource := new} = State) ->
     Req4 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req3),
     {format_new_html(NoteId, HostUrl), Req4, State};
 
-
 note_html(Req, #{resource := NoteId, node := Node} = State) ->
     Req2 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-store">>, Req),
     {HostUrl, Req3} = cowboy_req:host_url(Req2),
     {format_html(NoteId, Node, HostUrl), Req3, State}.
 
+
 format_new_html(NoteId, HostUrl) ->
-    Id = for_cowboy(NoteId),
+    Id = to_binary(NoteId),
     Subject = read_file("recepit.html"),
     Targets = ["ID_BINARY", "HOST_BINARY"],
     Values = [<<Id/binary>>, <<HostUrl/binary>>],
@@ -178,11 +200,9 @@ format_new_html(NoteId, HostUrl) ->
 
 
 format_html(NoteId, Node, HostUrl) ->
-    NookId = for_nook(NoteId),
-    
-    Message = case rpc:call(Node, nook, get, [NookId]) of
+    Message = case nook(Node, get, NoteId) of
                   {ok, #{contents := Contents}} ->
-                      rpc:call(Node, nook, decriment, [NookId]),
+                      nook(Node, decriment, NoteId),
                       Contents;
                   {error, missing_note} ->
                       <<"Missing note">>;
@@ -195,35 +215,36 @@ format_html(NoteId, Node, HostUrl) ->
     substitute(Subject, Targets, Values). 
 
 
-
-
-
-valid_id(Node, NoteId) ->
-    Id = for_nook(NoteId),
-    case rpc:call(Node, nook, exists, [Id]) of
+note_exists(Node, NoteId) ->
+    case nook(Node, exists, NoteId) of
         true ->  
             true;
         _ ->     
             false
     end.
-        
+
 
 read_file(Name) ->
 	{ok, Binary} = file:read_file(full_path(Name)),
 	Binary.
 
+
 full_path(Name) ->
 	filename:join([code:priv_dir(nook_fe), Name]).
 
 
-for_nook(<<_/binary>> = Id) ->
+% nook wants the ID to be a string, not a binary.
+to_list(<<_/binary>> = Id) ->
     binary_to_list(Id);
-for_nook([_|_] = Id) ->
+
+to_list([_|_] = Id) ->
     Id.
 
-for_cowboy([_|_] = Id) ->
+
+to_binary([_|_] = Id) ->
     list_to_binary(Id);
-for_cowboy(<<_/binary>> = Id) ->
+
+to_binary(<<_/binary>> = Id) ->
     Id.
 
 
@@ -240,13 +261,14 @@ params(<<"note">> = Key, PropList) ->
     proplists:get_value(Key, PropList);
 
 params(Key, PropList) ->
-    params_(proplists:get_value(Key, PropList)).
+    Bin = proplists:get_value(Key, PropList),
+    params_(string:to_lower(binary_to_list(Bin))).
 
 
-params_(<<"infinite">>) ->
+params_("infinite") ->
     infinite;
 params_(N) -> 
-    binary_to_integer(N).
+    list_to_integer(N).
 
     
 index(error) ->
@@ -265,3 +287,7 @@ substitute(Subject, [], []) ->
 substitute(Subject, [T|Ts], [V|Vs]) ->
     Result = re:replace(Subject, T, V, [{return, list}, global]),
     substitute(Result, Ts, Vs).
+
+
+exp_string(DateTime) ->
+    list_to_binary(ec_date:format("D, j M Y G:i:s", DateTime) ++ " GMT").

@@ -24,7 +24,7 @@ form {
   font-size: 14px;
   letter-spacing: 1px;
   line-height: 1.3em;
-  margin: -2px 0 45px;
+  margin: -2px 0 25px;
 }
 
 
@@ -35,10 +35,14 @@ form {
 
 
 .button {
-  height: 44px;
+  height: 20px;
   border: none;
 }
 
+#chars {
+  font-size: 10px;
+  text-align: left;
+}
   
 #note {
   width: 75%;
@@ -53,7 +57,7 @@ form {
 
 #submit {
   width: 25%;
-  height: 46px;
+  height: 20px;
   background: #E86C8D;
   font-family: inherit;
   font-weight: bold;
