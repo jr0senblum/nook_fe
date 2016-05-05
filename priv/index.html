@@ -23,20 +23,24 @@
         </div>    
 
       <div>
-          <textarea type="text" required cols="80" rows="15" id="note" name="note" maxlength="6000"></textarea>
+          <textarea type="text" required cols="80" rows="15" id="note" name="note" onKeyDown="limitText();" onKeyUp="limitText();"></textarea>
+
 	  <input type="submit" class="button" value="UPLOADE" id="submit">
           <div id="chars">6000 remaining</div>
         </div> 
     </form>
 
-<script type="text/javascript" src="http://code.jquery.com/jquery-1.7.1.min.js"></script>
-    <script language="javascript"> 
-      var maxLength = 6000;
-      $('textarea').keyup(function() {
-      var length = $(this).val().length;
-      var length = maxLength-length;
-      $('#chars').text(length + " remaining");
-      });
+    <script language="javascript">
+      <script type="text/javascript" src="http://code.jquery.com/jquery-1.7.1.min.js"></script>
+      function limitText() {
+        var length =$('#note').val().length;
+        
+        if (length > 6000) {
+          $('#note').val($('#note').val().substring(0, 6000));
+        } else {
+          $('#chars').text(6000 - length);
+        }
+      }
     </script>
 
 
