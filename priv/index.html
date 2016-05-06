@@ -30,17 +30,18 @@
         </div> 
     </form>
 
-    <script language="javascript">
-      <script type="text/javascript" src="http://code.jquery.com/jquery-1.7.1.min.js"></script>
-      function limitText() {
-        var length =$('#note').val().length;
-        
-        if (length > 6000) {
-          $('#note').val($('#note').val().substring(0, 6000));
-        } else {
-          $('#chars').text(6000 - length);
-        }
-      }
+    <script type="text/javascript" src="http://code.jquery.com/jquery-1.7.1.min.js"></script>
+<script languate="javascript">
+  function limitText() {
+    var length =$('#note').val().length;
+      
+    if (length > 6000) {
+      $('#note').val($('#note').val().substring(0, 6000));
+    } else {
+      $('#chars').text(6000 - length);
+    }
+  };
+
     </script>
 
 
