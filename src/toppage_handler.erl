@@ -200,19 +200,24 @@ format_new_html(NoteId, HostUrl) ->
 
 
 format_html(NoteId, Node, HostUrl) ->
-    Message = case nook(Node, get, NoteId) of
-                  {ok, #{contents := Contents}} ->
-                      nook(Node, decriment, NoteId),
-                      Contents;
-                  {error, missing_note} ->
-                      <<"Missing note">>;
-                  {error, {storage_error, E}} ->
-                      E
-              end,
     Subject = read_file("note.html"),
-    Targets = ["NOTE_BINARY","ID_BINARY","HOST_BINARY"],
-    Values = [<<Message/binary>>, <<NoteId/binary>>, <<HostUrl/binary>>],
-    substitute(Subject, Targets, Values). 
+    Targets = ["NOTE_BINARY","ID_BINARY","HOST_BINARY","GETS","EXP"],
+
+    Values = case nook(Node, get, NoteId) of
+                 {ok, #{contents := Message, gets := Gets, created := C, ttl := TTL}} ->
+                     nook(Node, decriment, NoteId),
+                     Exp = get_exp(C, TTL),
+                     RExp = <<"Expiration: ", Exp/binary>>,
+                     BGets = case is_integer(Gets) of true -> integer_to_binary(Gets); false -> <<"infinite">> end,
+                     RGets = <<"Gets: ", BGets/binary>>,
+                     [<<Message/binary>>, <<NoteId/binary>>, <<HostUrl/binary>>, RGets, RExp];
+                 {error, missing_note} ->
+                     [<<"MISSING NOTE">>, <<NoteId/binary>>, <<HostUrl/binary>>,<<"">>,<<"">>];
+                 {error, {storage_error, E}} ->
+                     [list_to_binary(E), <<NoteId/binary>>, <<HostUrl/binary>>,<<"">>,<<"">>]
+             end,
+    substitute(Subject, Targets, Values).
+
 
 
 note_exists(Node, NoteId) ->
@@ -291,3 +296,11 @@ substitute(Subject, [T|Ts], [V|Vs]) ->
 
 exp_string(DateTime) ->
     list_to_binary(ec_date:format("D, j M Y G:i:s", DateTime) ++ " GMT").
+
+
+
+get_exp(_Created, infinite) ->
+    <<"never">>;
+
+get_exp(Created, TTL) ->io:format("it is ~p~n",[TTL]),
+    exp_string(calendar:gregorian_seconds_to_datetime(Created + TTL)).
