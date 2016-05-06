@@ -302,5 +302,5 @@ exp_string(DateTime) ->
 get_exp(_Created, infinite) ->
     <<"never">>;
 
-get_exp(Created, TTL) ->io:format("it is ~p~n",[TTL]),
+get_exp(Created, TTL) ->
     exp_string(calendar:gregorian_seconds_to_datetime(Created + TTL)).
