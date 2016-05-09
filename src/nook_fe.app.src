@@ -8,8 +8,7 @@
   {applications,
    [kernel,
     stdlib,
-    cowboy,
-    nook
+    cowboy
    ]},
   {env,[]},
   {modules, []},
