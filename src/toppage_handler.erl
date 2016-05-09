@@ -238,14 +238,6 @@ full_path(Name) ->
 	filename:join([code:priv_dir(nook_fe), Name]).
 
 
-% nook wants the ID to be a string, not a binary.
-to_list(<<_/binary>> = Id) ->
-    binary_to_list(Id);
-
-to_list([_|_] = Id) ->
-    Id.
-
-
 to_binary([_|_] = Id) ->
     list_to_binary(Id);
 
